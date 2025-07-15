@@ -41,6 +41,14 @@ char **environ = __env;
 
 
 /* Functions */
+int _gettimeofday_r(struct _reent *ptr, struct timeval *tv, void *tz) {
+    (void)ptr;   // Unused
+    (void)tv;    // Unused
+    (void)tz;    // Unused
+    errno = ENOSYS;  // "Function not implemented"
+    return -1;
+}
+
 void initialise_monitor_handles()
 {
 }

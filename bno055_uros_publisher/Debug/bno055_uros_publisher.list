@@ -27,25 +27,25 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   ALLOC
  11 .ARM.attributes 00000030  00000000  00000000  0001d314  2**0
                   CONTENTS, READONLY
- 12 .debug_info   00028595  00000000  00000000  0001d344  2**0
+ 12 .debug_info   00028c55  00000000  00000000  0001d344  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 13 .debug_abbrev 000058a2  00000000  00000000  000458d9  2**0
+ 13 .debug_abbrev 00005952  00000000  00000000  00045f99  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 14 .debug_aranges 00001ee0  00000000  00000000  0004b180  2**3
+ 14 .debug_aranges 00001ee8  00000000  00000000  0004b8f0  2**3
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 15 .debug_rnglists 000017c2  00000000  00000000  0004d060  2**0
+ 15 .debug_rnglists 000017c8  00000000  00000000  0004d7d8  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 16 .debug_macro  0002e4d2  00000000  00000000  0004e822  2**0
+ 16 .debug_macro  0002e4d2  00000000  00000000  0004efa0  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_line   0002810f  00000000  00000000  0007ccf4  2**0
+ 17 .debug_line   00028131  00000000  00000000  0007d472  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_str    00116d48  00000000  00000000  000a4e03  2**0
+ 18 .debug_str    0011700b  00000000  00000000  000a55a3  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .comment      00000076  00000000  00000000  001bbb4b  2**0
+ 19 .comment      00000076  00000000  00000000  001bc5ae  2**0
                   CONTENTS, READONLY
- 20 .debug_frame  00008ef4  00000000  00000000  001bbbc4  2**2
+ 20 .debug_frame  00008f18  00000000  00000000  001bc624  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 21 .debug_line_str 00000062  00000000  00000000  001c4ab8  2**0
+ 21 .debug_line_str 00000062  00000000  00000000  001c553c  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
 
 Disassembly of section .text:
@@ -4176,7 +4176,7 @@ void StartDefaultTask(void *argument) {
  800222e:	2b00      	cmp	r3, #0
  8002230:	d004      	beq.n	800223c <StartDefaultTask+0x84>
 		printf("Error on default allocators (line %d)\n", __LINE__);
- 8002232:	f240 1121 	movw	r1, #289	@ 0x121
+ 8002232:	f44f 7190 	mov.w	r1, #288	@ 0x120
  8002236:	483f      	ldr	r0, [pc, #252]	@ (8002334 <StartDefaultTask+0x17c>)
  8002238:	f017 fb5c 	bl	80198f4 <iprintf>
 	}
