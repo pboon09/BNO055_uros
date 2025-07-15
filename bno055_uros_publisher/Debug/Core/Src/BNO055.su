@@ -1,0 +1,6 @@
+../Core/Src/BNO055.c:10:19:BNO055_Init	48	static
+../Core/Src/BNO055.c:59:6:BNO055_Read	80	static
+../Core/Src/BNO055.c:151:6:BNO055_Read_DMA	48	static
+../Core/Src/BNO055.c:198:6:BNO055_Calibrated	80	static
+../Core/Src/BNO055.c:296:6:BNO055_SetOffsets	64	static
+../Core/Src/BNO055.c:339:6:BNO055_SetAxis	40	static
