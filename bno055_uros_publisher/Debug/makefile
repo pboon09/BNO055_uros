@@ -66,8 +66,8 @@ all:
 main-build: bno055_uros_publisher.elf secondary-outputs
 
 # Tool invocations
-bno055_uros_publisher.elf bno055_uros_publisher.map: $(OBJS) $(USER_OBJS) /home/transporter/BNO055_uros/bno055_uros_publisher/STM32G474RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "bno055_uros_publisher.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/transporter/BNO055_uros/bno055_uros_publisher/STM32G474RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bno055_uros_publisher.map" -Wl,--gc-sections -static -L../micro_ros_stm32cubemx_utils/microros_static_library_ide/libmicroros --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+bno055_uros_publisher.elf bno055_uros_publisher.map: $(OBJS) $(USER_OBJS) /home/transporter/transporter_ws/firmware/BNO055_uros/bno055_uros_publisher/STM32G474RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "bno055_uros_publisher.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/transporter/transporter_ws/firmware/BNO055_uros/bno055_uros_publisher/STM32G474RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bno055_uros_publisher.map" -Wl,--gc-sections -static -L../micro_ros_stm32cubemx_utils/microros_static_library_ide/libmicroros --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -87,7 +87,7 @@ clean:
 	-@echo ' '
 
 pre-build:
-	echo "1" | sudo -S docker pull microros/micro_ros_static_library_builder:humble && echo "1" | sudo -S docker run --rm -v /home/transporter/BNO055_uros/bno055_uros_publisher:/project --env MICROROS_LIBRARY_FOLDER=micro_ros_stm32cubemx_utils/microros_static_library_ide microros/micro_ros_static_library_builder:humble
+	echo "1" | sudo -S docker pull microros/micro_ros_static_library_builder:humble && echo "1" | sudo -S docker run --rm -v /home/transporter/transporter_ws/firmware/BNO055_uros/bno055_uros_publisher:/project --env MICROROS_LIBRARY_FOLDER=micro_ros_stm32cubemx_utils/microros_static_library_ide microros/micro_ros_static_library_builder:humble
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)

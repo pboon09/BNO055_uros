@@ -1,5 +1,4 @@
 "./Core/Src/BNO055.o"
-"./Core/Src/BNO055_config.o"
 "./Core/Src/app_freertos.o"
 "./Core/Src/custom_memory_manager.o"
 "./Core/Src/dma.o"

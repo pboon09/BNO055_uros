@@ -38,7 +38,6 @@
 
 #include <std_msgs/msg/float64_multi_array.h>
 #include "BNO055.h"
-#include "BNO055_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,13 +66,18 @@ rcl_timer_t timer_;
 rclc_executor_t executor;
 
 rcl_publisher_t f64array_pub;
-double f64array_data[19];
+double f64array_data[16];
 std_msgs__msg__Float64MultiArray f64array_msg = { .data = { .data =
-		f64array_data, .capacity = 19, .size = 19 } };
+		f64array_data, .capacity = 16, .size = 16 } };
 
-BNO055_t BNO055;
 uint8_t sync = 0;
-uint8_t toggle = 0;
+
+BNO055_t bno;
+
+const calibration_data_t saved_calib = { .accel_offset_x = 8, .accel_offset_y =
+		17, .accel_offset_z = -17, .mag_offset_x = -396, .mag_offset_y = 179,
+		.mag_offset_z = -221, .gyro_offset_x = -2, .gyro_offset_y = 1,
+		.gyro_offset_z = 0, .accel_radius = 1000, .mag_radius = 1207 };
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -135,7 +139,15 @@ int main(void) {
 	MX_TIM2_Init();
 	MX_LPUART1_UART_Init();
 	/* USER CODE BEGIN 2 */
+	if (BNO055_Init(&bno, &hi2c1, 0) != HAL_OK) {
+		Error_Handler();
+	}
 
+	BNO055_LoadCalibration(&bno, &saved_calib);
+
+	BNO055_SetAxisRemap(&bno, 0x24, 0x06);
+
+	HAL_TIM_Base_Start_IT(&htim2);
 	/* USER CODE END 2 */
 
 	/* Init scheduler */
@@ -211,10 +223,6 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
 			HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 		cnt = (cnt + 1) % 50;
 
-		if ((toggle == 1) && (BNO055.flag == HAL_BUSY)) {
-			BNO055.flag = HAL_OK;
-		}
-
 		if (sync++ >= 255) {  // Sync session at lower frequency
 			rmw_uros_sync_session(1000);
 			sync = 0;
@@ -229,48 +237,35 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
 void SensorsPublished() {
 
 	// quaternion
-	f64array_msg.data.data[0] = BNO055.quat.x;
-	f64array_msg.data.data[1] = BNO055.quat.y;
-	f64array_msg.data.data[2] = BNO055.quat.z;
-	f64array_msg.data.data[3] = BNO055.quat.w;
+	f64array_msg.data.data[0] = bno.quat.x;
+	f64array_msg.data.data[1] = bno.quat.y;
+	f64array_msg.data.data[2] = bno.quat.z;
+	f64array_msg.data.data[3] = bno.quat.w;
 
 	//  acceleration
-	f64array_msg.data.data[4] = BNO055.accel.x;
-	f64array_msg.data.data[5] = BNO055.accel.y;
-	f64array_msg.data.data[6] = BNO055.accel.z;
-
-	// linear acceleration
-	f64array_msg.data.data[7] = BNO055.lin_acc.x;
-	f64array_msg.data.data[8] = BNO055.lin_acc.y;
-	f64array_msg.data.data[9] = BNO055.lin_acc.z;
+	f64array_msg.data.data[4] = bno.accel.x;
+	f64array_msg.data.data[5] = bno.accel.y;
+	f64array_msg.data.data[6] = bno.accel.z;
 
 	// gyro (angular velocity)
-	f64array_msg.data.data[10] = BNO055.gyro.x;
-	f64array_msg.data.data[11] = BNO055.gyro.y;
-	f64array_msg.data.data[12] = BNO055.gyro.z;
+	f64array_msg.data.data[7] = bno.gyro.x;
+	f64array_msg.data.data[8] = bno.gyro.y;
+	f64array_msg.data.data[9] = bno.gyro.z;
 
 	// magnetometer
-	f64array_msg.data.data[13] = BNO055.mag.x;
-	f64array_msg.data.data[14] = BNO055.mag.y;
-	f64array_msg.data.data[15] = BNO055.mag.z;
+	f64array_msg.data.data[10] = bno.mag.x;
+	f64array_msg.data.data[11] = bno.mag.y;
+	f64array_msg.data.data[12] = bno.mag.z;
 
 	// euler angles
-	f64array_msg.data.data[16] = BNO055.euler.roll;
-	f64array_msg.data.data[17] = BNO055.euler.pitch;
-	f64array_msg.data.data[18] = BNO055.euler.yaw;
+	f64array_msg.data.data[13] = bno.euler.roll;
+	f64array_msg.data.data[14] = bno.euler.pitch;
+	f64array_msg.data.data[15] = bno.euler.yaw;
 
 	RCCHECK(rcl_publish(&f64array_pub, &f64array_msg, NULL));
 
 }
 void StartDefaultTask(void *argument) {
-	BNO055_Init(&BNO055, &hi2c1, 0, NDOF);
-#ifdef BNO_CALIB_ON
-	  BNO055_Calibrated(&BNO055, &BNO055_stat, &BNO055_off);
-	  #endif
-	BNO055_SetOffsets(&BNO055, &BNO055_off);
-	BNO055_SetAxis(&BNO055, P0_Config, P1_Sign);
-	HAL_TIM_Base_Start_IT(&htim2);
-
 	// micro-ROS configuration
 
 	rmw_uros_set_custom_transport(
@@ -316,7 +311,18 @@ void StartDefaultTask(void *argument) {
 
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c) {
 	if (hi2c == &hi2c1) {
-		BNO055.flag = HAL_OK;
+		BNO055_ProcessDMA(&bno);
+
+		/* Data now available:
+		 * bno.accel.x/y/z     - Accelerometer in m/s²
+		 * bno.gyro.x/y/z      - Gyroscope in rad/s
+		 * bno.mag.x/y/z       - Magnetometer in µT
+		 * bno.euler.yaw       - Yaw in radians (CCW positive)
+		 * bno.euler.roll      - Roll in radians (CCW positive)
+		 * bno.euler.pitch     - Pitch in radians (CCW positive)
+		 * bno.quat.w/x/y/z    - Quaternion (absolute orientation)
+		 * bno.is_calibrated   - True if absolute orientation valid
+		 */
 	}
 }
 
@@ -338,13 +344,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		HAL_IncTick();
 	}
 	/* USER CODE BEGIN Callback 1 */
-	if (htim == &htim2) {
-		if (BNO055.flag == HAL_OK) {
-			BNO055_Read_DMA(&BNO055, 0);
-			BNO055.flag = HAL_BUSY;
-			toggle = 1;
-		}
-	}
+    if (htim == &htim2) {
+        if (bno.dma_ready) {
+            BNO055_UpdateDMA(&bno);
+        }
+    }
 	/* USER CODE END Callback 1 */
 }
 
