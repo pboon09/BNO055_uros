@@ -145,7 +145,7 @@ int main(void) {
 
 	BNO055_LoadCalibration(&bno, &saved_calib);
 
-	BNO055_SetAxisRemap(&bno, 0x24, 0x06);
+	BNO055_SetAxisRemap(&bno, AXIS_REMAP_P1, AXIS_REMAP_SIGN_P1);
 
 	HAL_TIM_Base_Start_IT(&htim2);
 	/* USER CODE END 2 */
@@ -312,17 +312,6 @@ void StartDefaultTask(void *argument) {
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c) {
 	if (hi2c == &hi2c1) {
 		BNO055_ProcessDMA(&bno);
-
-		/* Data now available:
-		 * bno.accel.x/y/z     - Accelerometer in m/s²
-		 * bno.gyro.x/y/z      - Gyroscope in rad/s
-		 * bno.mag.x/y/z       - Magnetometer in µT
-		 * bno.euler.yaw       - Yaw in radians (CCW positive)
-		 * bno.euler.roll      - Roll in radians (CCW positive)
-		 * bno.euler.pitch     - Pitch in radians (CCW positive)
-		 * bno.quat.w/x/y/z    - Quaternion (absolute orientation)
-		 * bno.is_calibrated   - True if absolute orientation valid
-		 */
 	}
 }
 
@@ -344,11 +333,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		HAL_IncTick();
 	}
 	/* USER CODE BEGIN Callback 1 */
-    if (htim == &htim2) {
-        if (bno.dma_ready) {
-            BNO055_UpdateDMA(&bno);
-        }
-    }
+	if (htim == &htim2) {
+		if (bno.dma_ready) {
+			BNO055_UpdateDMA(&bno);
+		}
+	}
 	/* USER CODE END Callback 1 */
 }
 

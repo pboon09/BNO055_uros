@@ -13,12 +13,10 @@
 #include <string.h>
 #include <math.h>
 
-/* I2C addresses */
 #define BNO055_ADDRESS_A    (0x28 << 1)
 #define BNO055_ADDRESS_B    (0x29 << 1)
 #define BNO055_ID           (0xA0)
 
-/* Registers */
 #define BNO055_CHIP_ID_ADDR          0x00
 #define BNO055_PAGE_ID_ADDR          0x07
 #define BNO055_ACCEL_DATA_X_LSB_ADDR 0x08
@@ -42,11 +40,14 @@
 
 #define BNO055_MODE_CONFIG    0x00
 #define BNO055_MODE_NDOF      0x0C
+#define BNO055_MODE_IMU       0x08
+#define BNO055_MODE_COMPASS   0x09
+#define BNO055_MODE_M4G       0x0A
+#define BNO055_MODE_NDOF_FMC_OFF 0x0B
 
-/* Axis remap options */
 typedef enum {
     AXIS_REMAP_P0 = 0x21,
-    AXIS_REMAP_P1 = 0x24,  // Default
+    AXIS_REMAP_P1 = 0x24,
     AXIS_REMAP_P2 = 0x24,
     AXIS_REMAP_P3 = 0x21,
     AXIS_REMAP_P4 = 0x24,
@@ -57,7 +58,7 @@ typedef enum {
 
 typedef enum {
     AXIS_REMAP_SIGN_P0 = 0x04,
-    AXIS_REMAP_SIGN_P1 = 0x00,  // Default
+    AXIS_REMAP_SIGN_P1 = 0x00,
     AXIS_REMAP_SIGN_P2 = 0x06,
     AXIS_REMAP_SIGN_P3 = 0x02,
     AXIS_REMAP_SIGN_P4 = 0x03,
@@ -80,16 +81,16 @@ typedef struct {
 } quaternion_t;
 
 typedef struct {
-    float roll;     // radians
-    float pitch;    // radians
-    float yaw;      // radians
+    float roll;
+    float pitch;
+    float yaw;
 } euler_t;
 
 typedef struct {
-    uint8_t system;  // 0-3
-    uint8_t gyro;    // 0-3
-    uint8_t accel;   // 0-3
-    uint8_t mag;     // 0-3
+    uint8_t system;
+    uint8_t gyro;
+    uint8_t accel;
+    uint8_t mag;
 } calibration_status_t;
 
 typedef struct {
@@ -109,28 +110,32 @@ typedef struct {
 typedef struct {
     I2C_HandleTypeDef *i2c;
     uint8_t address;
-
-    /* Units: accel[m/s²], gyro[rad/s], mag[µT], euler[rad], quat[normalized] */
+    uint8_t current_mode;
+    axis_remap_config_t current_remap_config;
+    axis_remap_sign_t current_remap_sign;
     vector3_t accel;
     vector3_t gyro;
     vector3_t mag;
     euler_t euler;
     quaternion_t quat;
-
     calibration_status_t calib_status;
-    uint8_t temperature;  // °C
+    int8_t temperature;
     bool is_calibrated;
-
     uint8_t dma_buffer[45];
     volatile bool dma_ready;
+    uint32_t last_update;
+    uint8_t error_count;
 } BNO055_t;
 
 HAL_StatusTypeDef BNO055_Init(BNO055_t *bno, I2C_HandleTypeDef *i2c, uint8_t addr);
+HAL_StatusTypeDef BNO055_SetMode(BNO055_t *bno, uint8_t mode);
 HAL_StatusTypeDef BNO055_SetAxisRemap(BNO055_t *bno, axis_remap_config_t config, axis_remap_sign_t sign);
 HAL_StatusTypeDef BNO055_LoadCalibration(BNO055_t *bno, const calibration_data_t *calib);
 HAL_StatusTypeDef BNO055_GetCalibration(BNO055_t *bno, calibration_data_t *calib);
 HAL_StatusTypeDef BNO055_GetCalibrationStatus(BNO055_t *bno);
 bool BNO055_IsCalibrated(BNO055_t *bno);
+bool BNO055_IsResponding(BNO055_t *bno);
+HAL_StatusTypeDef BNO055_SoftReset(BNO055_t *bno);
 HAL_StatusTypeDef BNO055_Update(BNO055_t *bno);
 HAL_StatusTypeDef BNO055_UpdateDMA(BNO055_t *bno);
 void BNO055_ProcessDMA(BNO055_t *bno);

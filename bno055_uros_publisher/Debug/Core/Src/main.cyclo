@@ -4,5 +4,5 @@
 ../Core/Src/main.c:237:6:SensorsPublished	1
 ../Core/Src/main.c:268:6:StartDefaultTask	2
 ../Core/Src/main.c:312:6:HAL_I2C_MemRxCpltCallback	2
-../Core/Src/main.c:339:6:HAL_TIM_PeriodElapsedCallback	4
-../Core/Src/main.c:359:6:Error_Handler	1
+../Core/Src/main.c:328:6:HAL_TIM_PeriodElapsedCallback	4
+../Core/Src/main.c:348:6:Error_Handler	1

@@ -9,17 +9,29 @@
 
 static HAL_StatusTypeDef WriteReg(BNO055_t *bno, uint8_t reg, uint8_t value)
 {
-    return HAL_I2C_Mem_Write(bno->i2c, bno->address, reg, 1, &value, 1, 30);
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Write(bno->i2c, bno->address, reg, 1, &value, 1, 30);
+    if (status != HAL_OK) {
+        bno->error_count++;
+    }
+    return status;
 }
 
 static HAL_StatusTypeDef ReadReg(BNO055_t *bno, uint8_t reg, uint8_t *value)
 {
-    return HAL_I2C_Mem_Read(bno->i2c, bno->address, reg, 1, value, 1, 30);
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(bno->i2c, bno->address, reg, 1, value, 1, 30);
+    if (status != HAL_OK) {
+        bno->error_count++;
+    }
+    return status;
 }
 
 static HAL_StatusTypeDef ReadRegs(BNO055_t *bno, uint8_t reg, uint8_t *buffer, uint8_t len)
 {
-    return HAL_I2C_Mem_Read(bno->i2c, bno->address, reg, 1, buffer, len, 30);
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read(bno->i2c, bno->address, reg, 1, buffer, len, 30);
+    if (status != HAL_OK) {
+        bno->error_count++;
+    }
+    return status;
 }
 
 HAL_StatusTypeDef BNO055_Init(BNO055_t *bno, I2C_HandleTypeDef *i2c, uint8_t addr)
@@ -30,10 +42,13 @@ HAL_StatusTypeDef BNO055_Init(BNO055_t *bno, I2C_HandleTypeDef *i2c, uint8_t add
     bno->i2c = i2c;
     bno->address = (addr == 0) ? BNO055_ADDRESS_A : BNO055_ADDRESS_B;
     bno->dma_ready = true;
+    bno->current_mode = BNO055_MODE_CONFIG;
 
-    HAL_Delay(50);  // Minimum power-on delay
+    bno->current_remap_config = AXIS_REMAP_P1;
+    bno->current_remap_sign = AXIS_REMAP_SIGN_P1;
 
-    /* Verify chip */
+    HAL_Delay(50);
+
     for (int i = 0; i < 5; i++) {
         if (ReadReg(bno, BNO055_CHIP_ID_ADDR, &chip_id) == HAL_OK && chip_id == BNO055_ID)
             break;
@@ -41,46 +56,86 @@ HAL_StatusTypeDef BNO055_Init(BNO055_t *bno, I2C_HandleTypeDef *i2c, uint8_t add
     }
 
     if (chip_id != BNO055_ID) {
-        WriteReg(bno, BNO055_SYS_TRIGGER_ADDR, 0x20);  // Reset if not responding
-        HAL_Delay(600);
-        ReadReg(bno, BNO055_CHIP_ID_ADDR, &chip_id);
-        if (chip_id != BNO055_ID) return HAL_ERROR;
+        if (WriteReg(bno, BNO055_SYS_TRIGGER_ADDR, 0x20) != HAL_OK)
+            return HAL_ERROR;
+        HAL_Delay(650);
+        if (ReadReg(bno, BNO055_CHIP_ID_ADDR, &chip_id) != HAL_OK || chip_id != BNO055_ID)
+            return HAL_ERROR;
     }
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG);
+    if (WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG) != HAL_OK)
+        return HAL_ERROR;
     HAL_Delay(20);
 
     WriteReg(bno, BNO055_PWR_MODE_ADDR, 0x00);
     WriteReg(bno, BNO055_PAGE_ID_ADDR, 0x00);
-    WriteReg(bno, BNO055_UNIT_SEL_ADDR, 0x04);  // rad, rad/s, m/s²
+    WriteReg(bno, BNO055_UNIT_SEL_ADDR, 0x04);
     WriteReg(bno, BNO055_SYS_TRIGGER_ADDR, 0x00);
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_NDOF);
+    if (BNO055_SetMode(bno, BNO055_MODE_NDOF) != HAL_OK)
+        return HAL_ERROR;
+
+    bno->last_update = HAL_GetTick();
+    bno->error_count = 0;
+
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef BNO055_SetMode(BNO055_t *bno, uint8_t mode)
+{
+    uint8_t current_mode;
+
+    if (ReadReg(bno, BNO055_OPR_MODE_ADDR, &current_mode) != HAL_OK)
+        return HAL_ERROR;
+
+    if (current_mode != BNO055_MODE_CONFIG) {
+        if (WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG) != HAL_OK)
+            return HAL_ERROR;
+        HAL_Delay(20);
+    }
+
+    if (WriteReg(bno, BNO055_OPR_MODE_ADDR, mode) != HAL_OK)
+        return HAL_ERROR;
     HAL_Delay(20);
 
+    if (ReadReg(bno, BNO055_OPR_MODE_ADDR, &current_mode) != HAL_OK)
+        return HAL_ERROR;
+
+    if (current_mode != mode)
+        return HAL_ERROR;
+
+    bno->current_mode = mode;
     return HAL_OK;
 }
 
 HAL_StatusTypeDef BNO055_SetAxisRemap(BNO055_t *bno, axis_remap_config_t config, axis_remap_sign_t sign)
 {
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG);
-    HAL_Delay(20);
+    uint8_t saved_mode = bno->current_mode;
 
-    WriteReg(bno, BNO055_AXIS_MAP_CONFIG_ADDR, config);
-    WriteReg(bno, BNO055_AXIS_MAP_SIGN_ADDR, sign);
+    if (BNO055_SetMode(bno, BNO055_MODE_CONFIG) != HAL_OK)
+        return HAL_ERROR;
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_NDOF);
-    HAL_Delay(20);
+    if (WriteReg(bno, BNO055_AXIS_MAP_CONFIG_ADDR, config) != HAL_OK)
+        return HAL_ERROR;
+    if (WriteReg(bno, BNO055_AXIS_MAP_SIGN_ADDR, sign) != HAL_OK)
+        return HAL_ERROR;
 
-    return HAL_OK;
+    bno->current_remap_config = config;
+    bno->current_remap_sign = sign;
+
+    return BNO055_SetMode(bno, saved_mode);
 }
 
 HAL_StatusTypeDef BNO055_LoadCalibration(BNO055_t *bno, const calibration_data_t *calib)
 {
     uint8_t buffer[22];
+    uint8_t saved_mode = bno->current_mode;
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG);
-    HAL_Delay(20);
+    if (calib->accel_radius == 0 || calib->mag_radius == 0)
+        return HAL_ERROR;
+
+    if (BNO055_SetMode(bno, BNO055_MODE_CONFIG) != HAL_OK)
+        return HAL_ERROR;
 
     buffer[0] = calib->accel_offset_x & 0xFF;
     buffer[1] = (calib->accel_offset_x >> 8) & 0xFF;
@@ -105,22 +160,24 @@ HAL_StatusTypeDef BNO055_LoadCalibration(BNO055_t *bno, const calibration_data_t
     buffer[20] = calib->mag_radius & 0xFF;
     buffer[21] = (calib->mag_radius >> 8) & 0xFF;
 
-    HAL_I2C_Mem_Write(bno->i2c, bno->address, BNO055_ACCEL_OFFSET_X_LSB_ADDR, 1, buffer, 22, 30);
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Write(bno->i2c, bno->address,
+                                                  BNO055_ACCEL_OFFSET_X_LSB_ADDR, 1, buffer, 22, 30);
+    if (status != HAL_OK)
+        return status;
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_NDOF);
-    HAL_Delay(20);
-
-    return HAL_OK;
+    return BNO055_SetMode(bno, saved_mode);
 }
 
 HAL_StatusTypeDef BNO055_GetCalibration(BNO055_t *bno, calibration_data_t *calib)
 {
     uint8_t buffer[22];
+    uint8_t saved_mode = bno->current_mode;
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG);
-    HAL_Delay(20);
+    if (BNO055_SetMode(bno, BNO055_MODE_CONFIG) != HAL_OK)
+        return HAL_ERROR;
 
-    ReadRegs(bno, BNO055_ACCEL_OFFSET_X_LSB_ADDR, buffer, 22);
+    if (ReadRegs(bno, BNO055_ACCEL_OFFSET_X_LSB_ADDR, buffer, 22) != HAL_OK)
+        return HAL_ERROR;
 
     calib->accel_offset_x = (int16_t)((buffer[1] << 8) | buffer[0]);
     calib->accel_offset_y = (int16_t)((buffer[3] << 8) | buffer[2]);
@@ -134,17 +191,15 @@ HAL_StatusTypeDef BNO055_GetCalibration(BNO055_t *bno, calibration_data_t *calib
     calib->accel_radius = (int16_t)((buffer[19] << 8) | buffer[18]);
     calib->mag_radius = (int16_t)((buffer[21] << 8) | buffer[20]);
 
-    WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_NDOF);
-    HAL_Delay(20);
-
-    return HAL_OK;
+    return BNO055_SetMode(bno, saved_mode);
 }
 
 HAL_StatusTypeDef BNO055_GetCalibrationStatus(BNO055_t *bno)
 {
     uint8_t calib_stat;
 
-    ReadReg(bno, BNO055_CALIB_STAT_ADDR, &calib_stat);
+    if (ReadReg(bno, BNO055_CALIB_STAT_ADDR, &calib_stat) != HAL_OK)
+        return HAL_ERROR;
 
     bno->calib_status.system = (calib_stat >> 6) & 0x03;
     bno->calib_status.gyro = (calib_stat >> 4) & 0x03;
@@ -162,12 +217,32 @@ bool BNO055_IsCalibrated(BNO055_t *bno)
     return bno->is_calibrated;
 }
 
+bool BNO055_IsResponding(BNO055_t *bno)
+{
+    uint8_t chip_id;
+    return (ReadReg(bno, BNO055_CHIP_ID_ADDR, &chip_id) == HAL_OK && chip_id == BNO055_ID);
+}
+
+HAL_StatusTypeDef BNO055_SoftReset(BNO055_t *bno)
+{
+    if (WriteReg(bno, BNO055_SYS_TRIGGER_ADDR, 0x20) != HAL_OK)
+        return HAL_ERROR;
+    HAL_Delay(650);
+
+    bno->error_count = 0;
+    return BNO055_Init(bno, bno->i2c, (bno->address == BNO055_ADDRESS_A) ? 0 : 1);
+}
+
 HAL_StatusTypeDef BNO055_Update(BNO055_t *bno)
 {
     uint8_t buffer[45];
 
-    if (ReadRegs(bno, BNO055_ACCEL_DATA_X_LSB_ADDR, buffer, 45) != HAL_OK)
+    if (ReadRegs(bno, BNO055_ACCEL_DATA_X_LSB_ADDR, buffer, 45) != HAL_OK) {
+        if (bno->error_count > 10) {
+            BNO055_SoftReset(bno);
+        }
         return HAL_ERROR;
+    }
 
     int16_t ax = (int16_t)((buffer[1] << 8) | buffer[0]);
     int16_t ay = (int16_t)((buffer[3] << 8) | buffer[2]);
@@ -209,15 +284,28 @@ HAL_StatusTypeDef BNO055_Update(BNO055_t *bno)
 
     bno->temperature = (int8_t)buffer[44];
 
+    bno->last_update = HAL_GetTick();
+    bno->error_count = 0;
+
     return HAL_OK;
 }
 
 HAL_StatusTypeDef BNO055_UpdateDMA(BNO055_t *bno)
 {
-    if (!bno->dma_ready) return HAL_BUSY;
+    if (!bno->dma_ready)
+        return HAL_BUSY;
 
     bno->dma_ready = false;
-    return HAL_I2C_Mem_Read_DMA(bno->i2c, bno->address, BNO055_ACCEL_DATA_X_LSB_ADDR, 1, bno->dma_buffer, 45);
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Read_DMA(bno->i2c, bno->address,
+                                                     BNO055_ACCEL_DATA_X_LSB_ADDR, 1, bno->dma_buffer, 45);
+    if (status != HAL_OK) {
+        bno->dma_ready = true;
+        bno->error_count++;
+        if (bno->error_count > 10) {
+            BNO055_SoftReset(bno);
+        }
+    }
+    return status;
 }
 
 void BNO055_ProcessDMA(BNO055_t *bno)
@@ -248,4 +336,6 @@ void BNO055_ProcessDMA(BNO055_t *bno)
 
     bno->temperature = (int8_t)b[44];
     bno->dma_ready = true;
+    bno->last_update = HAL_GetTick();
+    bno->error_count = 0;
 }
