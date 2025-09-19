@@ -60,8 +60,8 @@ all: main-build
 main-build: bno055_config.elf secondary-outputs
 
 # Tool invocations
-bno055_config.elf bno055_config.map: $(OBJS) $(USER_OBJS) /home/transporter/transporter_ws/firmware/bno055_config/STM32G474RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "bno055_config.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/transporter/transporter_ws/firmware/bno055_config/STM32G474RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bno055_config.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+bno055_config.elf bno055_config.map: $(OBJS) $(USER_OBJS) /home/transporter/transporter_ws/firmware/BNO055_uros/bno055_config/STM32G474RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "bno055_config.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/transporter/transporter_ws/firmware/BNO055_uros/bno055_config/STM32G474RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="bno055_config.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

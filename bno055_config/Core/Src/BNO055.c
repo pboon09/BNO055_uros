@@ -172,21 +172,12 @@ HAL_StatusTypeDef BNO055_GetCalibration(BNO055_t *bno, calibration_data_t *calib
 {
     uint8_t buffer[22];
     uint8_t saved_mode = bno->current_mode;
-    HAL_StatusTypeDef status;
 
-    if (saved_mode != BNO055_MODE_CONFIG) {
-        if (WriteReg(bno, BNO055_OPR_MODE_ADDR, BNO055_MODE_CONFIG) != HAL_OK)
-            return HAL_ERROR;
-        HAL_Delay(30);
-    }
+    if (BNO055_SetMode(bno, BNO055_MODE_CONFIG) != HAL_OK)
+        return HAL_ERROR;
 
-    status = ReadRegs(bno, BNO055_ACCEL_OFFSET_X_LSB_ADDR, buffer, 22);
-    if (status != HAL_OK) {
-        if (saved_mode != BNO055_MODE_CONFIG) {
-            WriteReg(bno, BNO055_OPR_MODE_ADDR, saved_mode);
-        }
-        return status;
-    }
+    if (ReadRegs(bno, BNO055_ACCEL_OFFSET_X_LSB_ADDR, buffer, 22) != HAL_OK)
+        return HAL_ERROR;
 
     calib->accel_offset_x = (int16_t)((buffer[1] << 8) | buffer[0]);
     calib->accel_offset_y = (int16_t)((buffer[3] << 8) | buffer[2]);
@@ -200,11 +191,7 @@ HAL_StatusTypeDef BNO055_GetCalibration(BNO055_t *bno, calibration_data_t *calib
     calib->accel_radius = (int16_t)((buffer[19] << 8) | buffer[18]);
     calib->mag_radius = (int16_t)((buffer[21] << 8) | buffer[20]);
 
-    if (saved_mode != BNO055_MODE_CONFIG) {
-        return WriteReg(bno, BNO055_OPR_MODE_ADDR, saved_mode);
-    }
-
-    return HAL_OK;
+    return BNO055_SetMode(bno, saved_mode);
 }
 
 HAL_StatusTypeDef BNO055_GetCalibrationStatus(BNO055_t *bno)

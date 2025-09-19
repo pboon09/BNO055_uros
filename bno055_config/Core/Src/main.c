@@ -48,58 +48,212 @@
 /* USER CODE BEGIN PV */
 BNO055_t bno;
 
-const calibration_data_t saved_calib = { .accel_offset_x = 8, .accel_offset_y =
-		17, .accel_offset_z = -17, .mag_offset_x = -396, .mag_offset_y = 179,
-		.mag_offset_z = -221, .gyro_offset_x = -2, .gyro_offset_y = 1,
-		.gyro_offset_z = 0, .accel_radius = 1000, .mag_radius = 1207 };
-
 uint8_t sensor_found = 0;
 volatile uint8_t calibration_mode = 0;
 uint32_t calibration_start_time = 0;
-uint8_t calibration_step = 0;
 calibration_data_t new_calib;
+
+typedef enum {
+    CALIB_STATE_IDLE = 0,
+    CALIB_STATE_FLAT_UP,
+    CALIB_STATE_FLAT_DOWN,
+    CALIB_STATE_SIDE_LEFT,
+    CALIB_STATE_SIDE_RIGHT,
+    CALIB_STATE_FRONT_UP,
+    CALIB_STATE_BACK_DOWN,
+    CALIB_STATE_FIGURE_8,
+    CALIB_STATE_COMPLETE,
+    CALIB_STATE_FAILED
+} calibration_state_t;
+
+typedef struct {
+    calibration_state_t state;
+    uint32_t state_timer;
+    uint32_t hold_time;
+    uint8_t accel_done;
+    uint8_t gyro_done;
+    uint8_t mag_done;
+    uint8_t retry_count;
+} calibration_process_t;
+
+calibration_process_t calib_process = {0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void Start_Calibration(void);
-void Process_Calibration(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void Start_Calibration(void) {
-	calibration_mode = 1;
-	calibration_start_time = HAL_GetTick();
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+    calibration_mode = 1;
+    calibration_start_time = HAL_GetTick();
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
+    calib_process.state = CALIB_STATE_FLAT_UP;
+    calib_process.state_timer = HAL_GetTick();
+    calib_process.hold_time = 3000;
+    calib_process.accel_done = 0;
+    calib_process.gyro_done = 0;
+    calib_process.mag_done = 0;
+    calib_process.retry_count = 0;
+}
+
+void Update_LED_Pattern(uint8_t pattern) {
+    static uint32_t led_timer = 0;
+    static uint8_t led_count = 0;
+
+    if (HAL_GetTick() - led_timer > 200) {
+        led_timer = HAL_GetTick();
+        if (led_count < pattern * 2) {
+            HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+            led_count++;
+        } else if (led_count > pattern * 2 + 4) {
+            led_count = 0;
+        } else {
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+            led_count++;
+        }
+    }
 }
 
 void Process_Calibration(void) {
-	static uint32_t last_check = 0;
+    static uint32_t last_check = 0;
 
-	if (HAL_GetTick() - last_check < 500)
-		return;
-	last_check = HAL_GetTick();
+    if (HAL_GetTick() - last_check < 100)
+        return;
+    last_check = HAL_GetTick();
 
-	BNO055_GetCalibrationStatus(&bno);
+    BNO055_GetCalibrationStatus(&bno);
 
-	if (bno.calib_status.system == 3 && bno.calib_status.gyro == 3
-			&& bno.calib_status.accel == 3 && bno.calib_status.mag == 3) {
+    if (bno.calib_status.gyro == 3 && !calib_process.gyro_done) {
+        calib_process.gyro_done = 1;
+    }
 
-		calibration_mode = 0;
-		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+    if (bno.calib_status.accel == 3 && !calib_process.accel_done) {
+        calib_process.accel_done = 1;
+        calib_process.state = CALIB_STATE_FIGURE_8;
+        calib_process.state_timer = HAL_GetTick();
+    }
 
-		HAL_Delay(100);
-		BNO055_GetCalibration(&bno, &new_calib);
-	} else {
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-	}
+    if (bno.calib_status.mag == 3 && !calib_process.mag_done) {
+        calib_process.mag_done = 1;
+    }
 
-	if (HAL_GetTick() - calibration_start_time > 120000) {
-		calibration_mode = 0;
-		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-	}
+    switch (calib_process.state) {
+        case CALIB_STATE_FLAT_UP:
+            Update_LED_Pattern(1);
+            if (HAL_GetTick() - calib_process.state_timer > calib_process.hold_time) {
+                calib_process.state = CALIB_STATE_FLAT_DOWN;
+                calib_process.state_timer = HAL_GetTick();
+            }
+            break;
+
+        case CALIB_STATE_FLAT_DOWN:
+            Update_LED_Pattern(2);
+            if (HAL_GetTick() - calib_process.state_timer > calib_process.hold_time) {
+                calib_process.state = CALIB_STATE_SIDE_LEFT;
+                calib_process.state_timer = HAL_GetTick();
+            }
+            break;
+
+        case CALIB_STATE_SIDE_LEFT:
+            Update_LED_Pattern(3);
+            if (HAL_GetTick() - calib_process.state_timer > calib_process.hold_time) {
+                calib_process.state = CALIB_STATE_SIDE_RIGHT;
+                calib_process.state_timer = HAL_GetTick();
+            }
+            break;
+
+        case CALIB_STATE_SIDE_RIGHT:
+            Update_LED_Pattern(4);
+            if (HAL_GetTick() - calib_process.state_timer > calib_process.hold_time) {
+                calib_process.state = CALIB_STATE_FRONT_UP;
+                calib_process.state_timer = HAL_GetTick();
+            }
+            break;
+
+        case CALIB_STATE_FRONT_UP:
+            Update_LED_Pattern(5);
+            if (HAL_GetTick() - calib_process.state_timer > calib_process.hold_time) {
+                calib_process.state = CALIB_STATE_BACK_DOWN;
+                calib_process.state_timer = HAL_GetTick();
+            }
+            break;
+
+        case CALIB_STATE_BACK_DOWN:
+            Update_LED_Pattern(6);
+            if (HAL_GetTick() - calib_process.state_timer > calib_process.hold_time) {
+                if (bno.calib_status.accel < 3) {
+                    calib_process.retry_count++;
+                    if (calib_process.retry_count < 3) {
+                        calib_process.state = CALIB_STATE_FLAT_UP;
+                        calib_process.state_timer = HAL_GetTick();
+                    } else {
+                        calib_process.state = CALIB_STATE_FIGURE_8;
+                        calib_process.state_timer = HAL_GetTick();
+                    }
+                } else {
+                    calib_process.state = CALIB_STATE_FIGURE_8;
+                    calib_process.state_timer = HAL_GetTick();
+                }
+            }
+            break;
+
+        case CALIB_STATE_FIGURE_8:
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+            HAL_Delay(50);
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+            HAL_Delay(50);
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+            HAL_Delay(50);
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
+            if (bno.calib_status.mag == 3 || HAL_GetTick() - calib_process.state_timer > 30000) {
+                if (bno.calib_status.system == 3 && bno.calib_status.gyro == 3
+                    && bno.calib_status.accel == 3 && bno.calib_status.mag == 3) {
+                    calib_process.state = CALIB_STATE_COMPLETE;
+                } else if (HAL_GetTick() - calibration_start_time > 60000) {
+                    calib_process.state = CALIB_STATE_FAILED;
+                }
+            }
+            break;
+
+        case CALIB_STATE_COMPLETE:
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+            BNO055_GetCalibration(&bno, &new_calib);
+            calibration_mode = 0;
+            calib_process.state = CALIB_STATE_IDLE;
+            break;
+
+        case CALIB_STATE_FAILED:
+            HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+            calibration_mode = 0;
+            calib_process.state = CALIB_STATE_IDLE;
+            break;
+
+        case CALIB_STATE_IDLE:
+        default:
+            break;
+    }
+
+    if (calibration_mode && HAL_GetTick() - calibration_start_time > 120000) {
+        calib_process.state = CALIB_STATE_FAILED;
+    }
+}
+
+uint8_t Get_Calibration_State(void) {
+    return calib_process.state;
+}
+
+void Get_Calibration_Info(uint8_t *state, uint8_t *sys, uint8_t *gyro, uint8_t *accel, uint8_t *mag) {
+    *state = calib_process.state;
+    *sys = bno.calib_status.system;
+    *gyro = bno.calib_status.gyro;
+    *accel = bno.calib_status.accel;
+    *mag = bno.calib_status.mag;
 }
 /* USER CODE END 0 */
 
@@ -135,37 +289,11 @@ int main(void) {
 	MX_I2C1_Init();
 	MX_TIM2_Init();
 	/* USER CODE BEGIN 2 */
-	HAL_Delay(1000);
-
-	uint8_t chip_id = 0;
-	HAL_I2C_Mem_Read(&hi2c1, BNO055_ADDRESS_A, 0x00, 1, &chip_id, 1, 100);
-
-	if (chip_id != 0xA0) {
-		while (1) {
-			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-			HAL_Delay(50);
-		}
-	}
-
 	if (BNO055_Init(&bno, &hi2c1, 0) != HAL_OK) {
-		while (1) {
-			HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-			HAL_Delay(200);
+			Error_Handler();
 		}
-	}
-
-	HAL_Delay(100);
-
-	if (saved_calib.accel_radius != 0 && saved_calib.mag_radius != 0) {
-		BNO055_LoadCalibration(&bno, &saved_calib);
-	}
 
 	BNO055_SetAxisRemap(&bno, AXIS_REMAP_P1, AXIS_REMAP_SIGN_P1);
-
-	for (int i = 0; i < 5; i++) {
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-		HAL_Delay(100);
-	}
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
