@@ -12,6 +12,7 @@ This package is part of the **CARVER Autonomous Robot** project - an autonomous 
 - [Software Architecture](#software-architecture)
 - [Installation](#installation)
 - [Usage](#usage)
+- [ROS2 Python Node Integration](#ros2-python-node-integration)
 - [Calibration](#calibration)
 - [Operation Modes](#operation-modes)
 - [Code Examples](#code-examples)
@@ -21,12 +22,13 @@ This package is part of the **CARVER Autonomous Robot** project - an autonomous 
 
 ## Overview
 
-This package provides two implementations for the [Bosch BNO055 9-DOF Absolute Orientation IMU](https://www.adafruit.com/product/2472):
+This package provides three implementations for the [Bosch BNO055 9-DOF Absolute Orientation IMU](https://www.adafruit.com/product/2472):
 
 1. **Standalone Calibration Version** - For testing and calibration procedures
-2. **micro-ROS Publisher Version** - For real-time ROS2 integration
+2. **micro-ROS Publisher Version** - For real-time ROS2 integration via STM32
+3. **ROS2 Python Node** - For processing and republishing IMU data with standard ROS2 messages
 
-Both versions utilize STM32 microcontrollers with DMA-based I2C communication for high-speed data acquisition at 100Hz.
+All versions utilize STM32 microcontrollers with DMA-based I2C communication for high-speed data acquisition at 100Hz.
 
 ## ⚠️ CRITICAL: Absolute Orientation Configuration
 
@@ -54,6 +56,7 @@ BNO055_SetAxisRemap(&bno, AXIS_REMAP_P1, AXIS_REMAP_SIGN_P1);
 - ✅ Absolute orientation with proper calibration loading
 - ✅ Built-in calibration system with persistent offset storage
 - ✅ Real-time publishing at 100Hz via micro-ROS (ROS2 version)
+- ✅ ROS2 Python node for standard message publishing
 - ✅ Quaternion, Euler angles, and raw sensor data output
 - ✅ Configurable axis remapping for any mounting orientation
 - ✅ Watchdog timer for system reliability (ROS2 version)
@@ -96,6 +99,16 @@ The BNO055 is a System in Package (SiP) integrating:
 - micro-ros-agent
 - std_msgs package
 
+### For ROS2 Python Node
+- ROS2 Humble or later
+- Python 3.8+
+- Required ROS2 packages:
+  - `std_msgs`
+  - `sensor_msgs`
+  - `geometry_msgs`
+  - `tf2_ros`
+  - `tf2_geometry_msgs`
+
 ## Hardware Setup
 
 ### Wiring Connections
@@ -108,42 +121,13 @@ Connect the BNO055 to your STM32 board:
 | GND        | GND       | Ground |
 | SDA        | PB9       | I2C Data (with 4.7kΩ pull-up) |
 | SCL        | PB8       | I2C Clock (with 4.7kΩ pull-up) |
-| RST        | Optional  | Reset (connect to GPIO for software reset) |
-| ADR        | GND/3.3V  | I2C Address selection |
 
 ### I2C Address Configuration
 
 - **Default address:** 0x28 (ADR pin LOW or floating)
 - **Alternative:** 0x29 (ADR pin HIGH)
 
-### Pull-up Resistors
-
-⚠️ **Important:** Ensure proper I2C pull-up resistors (4.7kΩ) are installed on SDA and SCL lines for reliable communication.
-
 ## Software Architecture
-
-### Project Structure
-
-```
-bno055_imu_sensor/
-├── Core/
-│   ├── Inc/
-│   │   ├── BNO055.h          # Driver header file
-│   │   └── main.h
-│   └── Src/
-│       ├── BNO055.c          # Driver implementation
-│       └── main.c            # Application code
-├── Middlewares/              # (ROS2 version only)
-│   └── microros/
-├── .ioc                      # STM32CubeMX configuration
-└── README.md
-```
-
-### Core Components
-
-1. **BNO055.h/c** - Simplified driver with DMA support and proper unit configuration
-2. **main.c** - Application layer (calibration or micro-ROS publisher)
-3. **DMA Configuration** - Optimized for continuous 100Hz operation
 
 ### Data Structure
 
@@ -234,9 +218,6 @@ Right-click on project → Build Project
 ```bash
 # Serial connection (USB)
 ros2 run micro_ros_agent micro_ros_agent serial -b 2000000 --dev /dev/ttyACM0
-
-# For network connection
-ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
 ```
 
 2. **Verify connection:**
@@ -259,6 +240,67 @@ ros2 topic hz /bno055_data
 # View data with formatting
 ros2 topic echo /bno055_data --no-arr
 ```
+
+## ROS2 Python Node Integration
+
+The Python ROS2 node provides a bridge between the micro-ROS Float64MultiArray data and standard ROS2 sensor messages, making it easier to integrate with existing ROS2 packages like robot_localization, rviz2, and navigation stacks.
+
+### Features of the Python Node
+
+- ✅ Subscribes to `/bno055_data` Float64MultiArray from micro-ROS
+- ✅ Publishes standard ROS2 sensor messages:
+  - `/imu` (sensor_msgs/Imu) - Complete IMU data with covariances
+- ✅ Configurable frame IDs and covariance values
+- ✅ Compatible with robot_localization package
+
+### Installation of Python Node
+
+1. **Copy the package to your ROS2 workspace:**
+
+2. **Install Python dependencies:**
+```bash
+# Make sure you have the required ROS2 packages
+sudo apt update
+sudo apt install ros-humble-sensor-msgs ros-humble-geometry-msgs ros-humble-tf2-ros
+```
+3. **Build the workspace:**
+```bash
+colcon build --packages-select bno055_imu
+source install/setup.bash
+```
+
+### Running the Python Node
+
+1. **Start the micro-ROS agent (STM32 must be running micro-ROS firmware):**
+```bash
+ros2 run micro_ros_agent micro_ros_agent serial -b 2000000 --dev /dev/ttyACM0
+```
+
+2. **Launch the BNO055 IMU node:**
+```bash
+# In a new terminal
+source ~/ros2_ws/install/setup.bash
+ros2 run bno055_imu bno055_imu_node
+```
+
+### Available Topics and Messages
+
+| Topic | Message Type | Description | Rate |
+|-------|--------------|-------------|------|
+| `/bno055_data` | std_msgs/Float64MultiArray | Raw data from STM32 (subscribed) | 100Hz |
+| `/imu` | sensor_msgs/Imu | Complete IMU message | 100Hz |
+
+### Visualization in RViz2
+
+1. **Launch RViz2:**
+```bash
+rviz2
+```
+
+2. **Add IMU visualization:**
+   - Click "Add" → "By topic" → Select `/imu` → "Imu"
+   - Set Fixed Frame to `imu_link`
+   - Adjust visualization settings as needed
 
 ## Calibration
 
@@ -465,6 +507,17 @@ BNO055_SetAxisRemap(&bno, AXIS_REMAP_P1, 0x05);
 - Check for proper grounding
 - Enable automatic soft reset on errors
 
+#### 6. Python Node Not Receiving Data
+
+**Symptoms:** Python node running but no data published
+
+**Solutions:**
+- Verify micro-ROS agent is running
+- Check that STM32 is publishing to `/bno055_data`
+- Verify topic names match between publisher and subscriber
+- Check network connectivity (for UDP connection)
+- Ensure correct serial port permissions
+
 ### LED Status Indicators
 
 | Pattern | Meaning |
@@ -476,7 +529,9 @@ BNO055_SetAxisRemap(&bno, AXIS_REMAP_P1, 0x05);
 
 ## API Reference
 
-### Initialization Functions
+### C/C++ Functions (STM32)
+
+#### Initialization Functions
 
 ```c
 // Initialize sensor with I2C interface
@@ -489,7 +544,7 @@ HAL_StatusTypeDef BNO055_SetMode(BNO055_t *bno, uint8_t mode);
 HAL_StatusTypeDef BNO055_SetAxisRemap(BNO055_t *bno, axis_remap_config_t config, axis_remap_sign_t sign);
 ```
 
-### Calibration Functions
+#### Calibration Functions
 
 ```c
 // Load calibration offsets
@@ -505,7 +560,7 @@ HAL_StatusTypeDef BNO055_GetCalibrationStatus(BNO055_t *bno);
 bool BNO055_IsCalibrated(BNO055_t *bno);
 ```
 
-### Data Acquisition Functions
+#### Data Acquisition Functions
 
 ```c
 // Update all sensor data (blocking)
@@ -518,7 +573,7 @@ HAL_StatusTypeDef BNO055_UpdateDMA(BNO055_t *bno);
 void BNO055_ProcessDMA(BNO055_t *bno);
 ```
 
-### Utility Functions
+#### Utility Functions
 
 ```c
 // Check if sensor is responding
@@ -527,6 +582,16 @@ bool BNO055_IsResponding(BNO055_t *bno);
 // Perform soft reset
 HAL_StatusTypeDef BNO055_SoftReset(BNO055_t *bno);
 ```
+
+### Python ROS2 Node API
+
+The BNO055 Python node provides the following ROS2 interfaces:
+
+#### Published Topics
+- `/imu` (sensor_msgs/Imu) - Complete IMU data
+
+#### Subscribed Topics
+- `/bno055_data` (std_msgs/Float64MultiArray) - Raw sensor data
 
 ## Data Conversion Reference
 
@@ -549,6 +614,7 @@ HAL_StatusTypeDef BNO055_SoftReset(BNO055_t *bno);
 | Power Consumption | ~50mW |
 | Startup Time | ~650ms |
 | Calibration Time | 2-5 minutes |
+| Python Node Latency | <5ms |
 
 ## References
 
@@ -557,6 +623,7 @@ HAL_StatusTypeDef BNO055_SoftReset(BNO055_t *bno);
 - [STM32 HAL Documentation](https://www.st.com/en/embedded-software/stm32cube-mcu-mpu-packages.html)
 - [ROS2 Humble Documentation](https://docs.ros.org/en/humble/)
 - [Adafruit BNO055 Guide](https://learn.adafruit.com/adafruit-bno055-absolute-orientation-sensor)
+- [TF2 Documentation](https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Introduction-To-Tf2.html)
 
 ## Feedback
 If you have any feedback, please create an issue and I will answer your questions there.
