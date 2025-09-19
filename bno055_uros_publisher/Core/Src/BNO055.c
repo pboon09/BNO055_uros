@@ -69,7 +69,7 @@ HAL_StatusTypeDef BNO055_Init(BNO055_t *bno, I2C_HandleTypeDef *i2c, uint8_t add
 
     WriteReg(bno, BNO055_PWR_MODE_ADDR, 0x00);
     WriteReg(bno, BNO055_PAGE_ID_ADDR, 0x00);
-    WriteReg(bno, BNO055_UNIT_SEL_ADDR, 0x04);
+    WriteReg(bno, BNO055_UNIT_SEL_ADDR, 0x0C);
     WriteReg(bno, BNO055_SYS_TRIGGER_ADDR, 0x00);
 
     if (BNO055_SetMode(bno, BNO055_MODE_NDOF) != HAL_OK)

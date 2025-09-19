@@ -1062,8 +1062,8 @@ HAL_StatusTypeDef BNO055_Init(BNO055_t *bno, I2C_HandleTypeDef *i2c, uint8_t add
  8000bc8:	2107      	movs	r1, #7
  8000bca:	68f8      	ldr	r0, [r7, #12]
  8000bcc:	f7ff ff32 	bl	8000a34 <WriteReg>
-    WriteReg(bno, BNO055_UNIT_SEL_ADDR, 0x04);
- 8000bd0:	2204      	movs	r2, #4
+    WriteReg(bno, BNO055_UNIT_SEL_ADDR, 0x0C);
+ 8000bd0:	220c      	movs	r2, #12
  8000bd2:	213b      	movs	r1, #59	@ 0x3b
  8000bd4:	68f8      	ldr	r0, [r7, #12]
  8000bd6:	f7ff ff2d 	bl	8000a34 <WriteReg>
