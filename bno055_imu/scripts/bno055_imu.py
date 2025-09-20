@@ -8,7 +8,7 @@ from tf_transformations import euler_from_quaternion
 
 class BnoPublisher(Node):
     def __init__(self):
-        super().__init__('bno055_remapping_node')
+        super().__init__('bno055_imu_node')
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             depth=10
@@ -56,8 +56,8 @@ class BnoPublisher(Node):
             imu_msg.orientation.w
         ])
         
-        print(f"Roll: {roll:.2f}, Pitch: {pitch:.2f}, Yaw: {yaw:.2f}")
-        print(f"Angular Velocity - x: {imu_msg.angular_velocity.x:.2f}, y: {imu_msg.angular_velocity.y:.2f}, z: {imu_msg.angular_velocity.z:.2f}")
+        # print(f"Roll: {roll:.2f}, Pitch: {pitch:.2f}, Yaw: {yaw:.2f}")
+        # print(f"Angular Velocity - x: {imu_msg.angular_velocity.x:.2f}, y: {imu_msg.angular_velocity.y:.2f}, z: {imu_msg.angular_velocity.z:.2f}")
 
 def main(args=None):
     rclpy.init(args=args)
